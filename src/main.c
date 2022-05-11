@@ -16,6 +16,7 @@ int main(int argc, char *argv[])
   initBloco(gNaoMinerado, NULL, &r);
 
   BlocoMinerado *gMinerado = minerarBloco(gNaoMinerado);
+  NoLista *raiz = NULL;
   //  Minera
   //  BlocoMinerado *bM = minerarBloco(genesis);
   //  Adiciona o bloco minerado na blockchain
@@ -67,19 +68,34 @@ BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM)
   unsigned char hash[SHA256_DIGEST_LENGTH];
   // Para não demorar muito na mineração
   unsigned int maxnonce = 500000;
+  // 0 para nao minerado e 1 para minerado
+  char minerado = 0;
   do
   {
     criarHash(bNM, hash);
-    if (hash[0] == 0 && hash[1] == 0)
-      break;
+    for (short int j = 0; j < dificuldade / 2; j++)
+    {
+      if (hash[j] != 0)
+      {
+        minerado = 0;
+        break;
+      }
+      else if (hash[j] == 0)
+        minerado = 1;
+    }
     bNM->nonce += 1;
-  } while (bNM->nonce <= maxnonce);
+  } while (bNM->nonce <= maxnonce && minerado == 0);
   printBloco(bNM);
+  bNM->nonce -= 1;
 
   BlocoMinerado *aux = (BlocoMinerado *)malloc(sizeof(BlocoMinerado));
   aux->bloco = *bNM;
+  printf("\n");
   for (int k = 0; k < SHA256_DIGEST_LENGTH; k++)
+  {
     aux->hash[k] = hash[k];
+    printf("%x", hash[k]);
+  }
   return aux;
 }
 

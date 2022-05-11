@@ -7,6 +7,8 @@
 #define MAX_TRANSACOES 61
 #define MAX_ENDERECOS 255
 #define MAX_BITCOINS_TRANSACAO 50
+
+short int dificuldade = 4;
 // Bloco que ainda não foi minerado
 struct BlocoNaoMinerado
 {
@@ -24,6 +26,14 @@ struct BlocoMinerado
   unsigned char hash[SHA256_DIGEST_LENGTH]; // 32 bytes
 };
 typedef struct BlocoMinerado BlocoMinerado;
+
+struct NoLista
+{
+  BlocoMinerado *bM;
+  struct NoLista *prox;
+};
+
+typedef struct NoLista NoLista;
 
 // Estrutura para a AVL de enredeços
 struct EnderecoAVL
@@ -44,6 +54,8 @@ struct BitCoinAVL
   struct BitCoinAVL *dir;
 };
 typedef struct BitCoinAVL BitCoinAVL;
+
+void addBloco(BlocoMinerado *bM, NoLista *no);
 
 /* Gera um número aleatório inteiro e positivo com tamanho mínimo = min e máximo = max
  * Entrada:

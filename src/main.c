@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
   Metadados *cabecalho = (Metadados *)malloc(sizeof(Metadados));
   inicializarMetadados(arquivo, cabecalho);
 
-  BlocoMinerado blocos[4];
+  BlocoMinerado blocos[2];
   BlocoNaoMinerado *bNM = NULL;
   BlocoMinerado *bMAtual = NULL;
   BlocoMinerado *bMAnterior = NULL;
@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
     bMAtual = minerarBloco(bNM);
     n += 1;
     blocos[n - 1] = *bMAtual;
-    if (n == 4)
+    if (n == 2)
     {
       arquivaBlocosMinerados(n, blocos, arquivo);
       attMetadados(arquivo, n, cabecalho);
@@ -230,7 +230,7 @@ BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM)
   do
   {
     criarHash(bNM, hash);
-    short int *chave = (short int *)hash;
+    int *chave = (int *)hash;
     if (*chave == 0)
       minerado = 1;
     bNM->nonce += 1;

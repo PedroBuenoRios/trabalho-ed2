@@ -2,29 +2,21 @@
 #include "../include/blockchain.h"
 #include "../include/mtwister/mtwister.h"
 
-struct Metadados
-{
-  int quantidade;
-  int tamanho_bloco;
-};
-typedef struct Metadados Metadados;
-
-void criarHash(BlocoNaoMinerado *bNM, unsigned char *hash);
-void printBloco(BlocoNaoMinerado *bNM);
-// void addBlocoMinerado(BlocoMinerado *bM, NoLista **raiz);
-void inicializarMetadados(const char *caminho, Metadados *cabecalho);
-void arquivaBlocosMinerados(int n, BlocoMinerado *bM, const char *caminho);
-void attMetadados(const char *caminho, int n, Metadados *cabecalho);
-BlocoMinerado *procuraUltimoBloco(const char *caminho, int n);
-
 int main(int argc, char *argv[])
 {
 
-  MTRand r = seedRand(SEED);
+  MTRand rand = seedRand(SEED);
+
+  unsigned int Carteira[MAX_ENDERECOS];
+
+  unsigned int carteiraOrdenada[MAX_ENDERECOS];
+  unsigned int endereco[MAX_ENDERECOS];
+  int a = -1;
 
   const char *arquivo = "./blockchain.bin";
   Metadados *cabecalho = (Metadados *)malloc(sizeof(Metadados));
-  inicializarMetadados(arquivo, cabecalho);
+  inicializarMetadados(arquivo, cabecalho, &rand);
+  inicializaEnderecos(Carteira, &rand, cabecalho, endereco);
 
   BlocoMinerado blocos[2];
   BlocoNaoMinerado *bNM = NULL;
@@ -32,51 +24,90 @@ int main(int argc, char *argv[])
   BlocoMinerado *bMAnterior = NULL;
 
   int n = 0;
-  if (cabecalho->quantidade == 0)
-  {
-    // Bloco Genesis
-    bNM = alocaBlocoNaoMinerado();
-    initBloco(bNM, NULL, &r);
-
-    bMAtual = minerarBloco(bNM);
-    bMAnterior = bMAtual;
-    n += 1;
-    blocos[n - 1] = *bMAtual;
-  }
-  else if (cabecalho->quantidade > 0)
-  {
-    bMAnterior = procuraUltimoBloco(arquivo, cabecalho->quantidade);
-  }
 
   // NoLista *raiz = NULL;
   // addBlocoMinerado(genMinerado, &raiz);
 
+  ordenaBitcoins(Carteira, carteiraOrdenada, endereco);
   int minerar = 1;
-  while (minerar)
+  while (a != 0)
   {
-    // Aloca um novo
-    bNM = alocaBlocoNaoMinerado();
-    // Inicializa
-    initBloco(bNM, bMAnterior, &r);
-    // Minera
-    bMAtual = minerarBloco(bNM);
-    n += 1;
-    blocos[n - 1] = *bMAtual;
-    if (n == 2)
+    printf("\nDigite o numero referente a operação que deseja realizar\n");
+    printf("1-Pesquisar hash de um bloco\n");
+    printf("2-Pesquisar Carteira\n");
+    printf("3-Buscar carteira com mais BitCoins\n");
+    printf("4-Listar Carteiras e suas quantias de BitCoin(s)\n");
+    printf("5-Minerar Bloco\n");
+    printf("0-Sair\n");
+    scanf("%d", &a);
+
+    switch (a)
     {
-      arquivaBlocosMinerados(n, blocos, arquivo);
-      attMetadados(arquivo, n, cabecalho);
-      n = 0;
+    case 1:
+      // Fazer a busca do hash de um bloco
+      break;
+    case 2:
+      printf("Digite o endereco da Carteira que deseja pesquisar\n");
+      int end;
+      scanf("%d", &end);
+      printf("A Carteira %d tem %u BitCoin(s)\n", end, Carteira[end]);
+      break;
+    case 3:
+      printf("%3d - %3u\n", endereco[255], carteiraOrdenada[255]);
+      break;
+    case 4:
+      printf("Endereco   -   Bitcoin(s)\n");
+      for (int k = 0; k < 256; k++)
+        printf("%3d - %3u\n", endereco[k], carteiraOrdenada[k]);
+      break;
+    case 5:
+      if (cabecalho->quantidade == 0)
+      {
+        // Bloco Genesis
+        bNM = alocaBlocoNaoMinerado();
+        initBloco(bNM, NULL, &rand, Carteira, cabecalho);
+
+        bMAtual = minerarBloco(bNM);
+        bMAnterior = bMAtual;
+        n += 1;
+        blocos[n - 1] = *bMAtual;
+      }
+      else if (cabecalho->quantidade > 0)
+      {
+        bMAnterior = procuraUltimoBloco(arquivo, cabecalho->quantidade);
+      }
+      while (minerar)
+      {
+        // Aloca um novo
+        bNM = alocaBlocoNaoMinerado();
+        // Inicializa
+        initBloco(bNM, bMAnterior, &rand, Carteira, cabecalho);
+        // Minera
+        bMAtual = minerarBloco(bNM);
+        n += 1;
+        blocos[n - 1] = *bMAtual;
+        if (n == 2)
+        {
+          arquivaBlocosMinerados(n, blocos, arquivo);
+          attMetadados(arquivo, n, cabecalho, &rand);
+          arquivaBitcoins(Carteira);
+          n = 0;
+          minerar = 0;
+        }
+        // Adiciona o bloco minerado na blockchain
+        bMAnterior = bMAtual;
+      }
+      ordenaBitcoins(Carteira, carteiraOrdenada, endereco);
+      break;
+    default:
+      printf("Digite uma opcao valida!\n");
     }
-    // Adiciona o bloco minerado na blockchain
-    // addBlocoMinerado(bMAtual, &raiz);
-    bMAnterior = bMAtual;
   }
 
   return 0;
 }
 
-void inicializarMetadados(const char *caminho, Metadados *cabecalho)
+void inicializarMetadados(const char *caminho, Metadados *cabecalho, MTRand *rand)
 {
   FILE *arq = fopen(caminho, "rb");
   if (arq == NULL)
@@ -84,6 +115,8 @@ void inicializarMetadados(const char *caminho, Metadados *cabecalho)
     arq = fopen(caminho, "wb");
     cabecalho->quantidade = 0;
     cabecalho->tamanho_bloco = (int)sizeof(BlocoMinerado);
+    cabecalho->indice_mtrand = 0;
+    cabecalho->qtd_estouros = 0;
     if (fwrite(cabecalho, sizeof(Metadados), 1, arq) != 1)
     {
       fclose(arq);
@@ -103,10 +136,16 @@ void inicializarMetadados(const char *caminho, Metadados *cabecalho)
     exit(1);
   }
   // Se existem o que está escrito neles?
+  for (int k = 0; k < cabecalho->qtd_estouros; k++)
+  {
+    rand->index = 624;
+    genRandLong(rand);
+  }
+  rand->index = cabecalho->indice_mtrand;
   if (cabecalho->quantidade >= 0 && cabecalho->tamanho_bloco == sizeof(BlocoMinerado))
   {
     fclose(arq);
-    printf("%d, %d\n", cabecalho->quantidade, cabecalho->tamanho_bloco);
+    printf("%d, %d, %d\n", cabecalho->quantidade, cabecalho->tamanho_bloco, cabecalho->indice_mtrand);
     return;
   }
   fclose(arq);
@@ -180,7 +219,7 @@ void arquivaBlocosMinerados(int n, BlocoMinerado *bM, const char *caminho)
   fclose(arq);
 }
 
-void attMetadados(const char *caminho, int n, Metadados *cabecalho)
+void attMetadados(const char *caminho, int n, Metadados *cabecalho, MTRand *rand)
 {
   FILE *arq = fopen(caminho, "r+b");
   if (arq == NULL)
@@ -197,6 +236,7 @@ void attMetadados(const char *caminho, int n, Metadados *cabecalho)
   }
   rewind(arq);
   cabecalho->quantidade += n;
+  cabecalho->indice_mtrand = rand->index;
   if (fwrite(cabecalho, sizeof(Metadados), 1, arq) != 1)
   {
     fclose(arq);
@@ -213,8 +253,8 @@ void criarHash(BlocoNaoMinerado *bNM, unsigned char *hash)
 
 void printBloco(BlocoNaoMinerado *bNM)
 {
-  printf("Numero: %ud\n", bNM->numero);
-  printf("Nonce: %ud\n", bNM->nonce);
+  printf("Numero: %u\n", bNM->numero);
+  printf("Nonce: %u\n", bNM->nonce);
   for (int i = 0; i < 183; i += 3)
   {
     printf("Transacao: Origem: %d, Destino: %d, BitCoins: %d\n", bNM->data[i], bNM->data[i + 1], bNM->data[i + 2]);
@@ -248,8 +288,11 @@ BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM)
   return aux;
 }
 
-unsigned int getRandInt(MTRand *r, unsigned int min, unsigned int max)
+unsigned int getRandInt(MTRand *r, unsigned int min, unsigned int max, Metadados *cabecalho)
 {
+  if (r->index >= 624)
+    cabecalho->qtd_estouros += 1;
+  cabecalho->indice_mtrand = r->index;
   return (unsigned int)(genRandLong(r) % (max - min + 1)) + min;
 }
 
@@ -259,14 +302,19 @@ BlocoNaoMinerado *alocaBlocoNaoMinerado()
   return aux;
 }
 
-void initBloco(BlocoNaoMinerado *bNM, BlocoMinerado *bAnt, MTRand *r)
+void initBloco(
+    BlocoNaoMinerado *bNM,
+    BlocoMinerado *bAnt,
+    MTRand *r,
+    unsigned int *Carteira,
+    Metadados *cabecalho)
 {
 
   int i = 0;
   if (bAnt == NULL)
   {
     bNM->numero = 1;
-    bNM->nonce = 0;
+    bNM->nonce = 170598660;
     for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
       bNM->hashAnterior[i] = 0;
   }
@@ -289,87 +337,176 @@ void initBloco(BlocoNaoMinerado *bNM, BlocoMinerado *bAnt, MTRand *r)
     bNM->data[i] = 0;
 
   // Gerando o número de transações
-  unsigned int nTrans = getRandInt(r, 0, MAX_TRANSACOES);
-  i = 0;
-  // Gerando os valores das transações
-  // !! Criar uma função para realizar as transações
-  // !! Otimizar o algoritmo para as transações
+  unsigned int nTrans = getRandInt(r, 0, MAX_TRANSACOES, cabecalho);
 
-  do
-  {
-    // Endereço de origem
-    unsigned int origem = getRandInt(r, 0, MAX_ENDERECOS);
-    // Endereço de destino
-    unsigned int destino = getRandInt(r, 0, MAX_ENDERECOS);
-    //   // Número de bitcoins na transação
-    unsigned int nBitcoins = getRandInt(r, 0, MAX_BITCOINS_TRANSACAO);
-
-    bNM->data[i] = (unsigned char)origem;
-    bNM->data[i + 1] = (unsigned char)destino;
-    bNM->data[i + 2] = (unsigned char)nBitcoins;
-    i += 3;
-  } while (i <= nTrans);
+  transacoes(bNM, r, Carteira, nTrans, cabecalho);
 }
 
-/*void addBlocoMinerado(BlocoMinerado *bM, NoLista **raiz)
+void inicializaEnderecos(
+    unsigned int *Carteira,
+    MTRand *r,
+    Metadados *cabecalho,
+    unsigned int *endereco)
 {
 
-  NoLista *aux = (NoLista *)malloc(sizeof(NoLista));
-  aux->bM = bM;
-  aux->prox = NULL;
+  for (int k = 0; k < MAX_ENDERECOS; k++)
+    endereco[k] = k;
 
-  if (*raiz == NULL)
+  FILE *arq = fopen(CAMINHO_TRANSACAO, "r+b");
+  if (arq == NULL)
   {
-    *raiz = aux;
+    arq = fopen(CAMINHO_TRANSACAO, "wb");
+    preencheCarteiras(r, Carteira, cabecalho);
+
+    if (fwrite(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+    {
+      fclose(arq);
+      printf("Erro ao escrever no arquivo\n");
+      exit(1);
+    }
+    printf("Ok!\n");
+    fclose(arq);
     return;
   }
-  aux->prox = (*raiz)->prox;
-  (*raiz)->prox = aux;
-}
-void transacoes(MTRand *r, EnderecoAVL **end, BitCoinAVL **btc)
-{
 
-  // for (int i = getRandInt(r, 0, 61); i > 0; i--)
-  // {
-  //   unsigned int origem, destino;
-
-  //   origem = getRandInt(r, 0, MAX_ENDERECOS);
-  //   destino = getRandInt(r, 0, MAX_ENDERECOS);
-
-  //   if (origem != destino)
-  //   { // Verificação para evitar que seja realizada uma transação com origem e destino iguais
-
-  //     // Endereço de origem
-  //     unsigned int origemCarteira = origem;
-  //     // Endereço de destino
-  //     unsigned int destinoCarteira = destino;
-  //     // Número de bitcoins na transação
-  //     unsigned int nBitcoins = getRandInt(r, 0, MAX_BITCOINS_TRANSACAO);
-  //   }
-  //   else // caso sejam iguais o i é incrementado para que uma nova transacao valida ocorra
-  //     i++;
-  // }
-}*/
-/*
-unsigned char *buscaHash(NoLista *raiz, unsigned int chave)
-{
-
-  int naoAchou = 1;
-
-  int numAtual = raiz->bM->bloco.numero;
-
-  do
+  rewind(arq);
+  if (fread(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
   {
-    if (raiz == NULL)
-    {
-      naoAchou = 1;
-      break;
-    }
-    if (numAtual == chave)
-      naoAchou = 0;
-    raiz = raiz->prox;
-  } while (naoAchou);
-
-  return naoAchou ? NULL : raiz->bM->hash;
+    fclose(arq);
+    printf("Erro na leitura do arquivo\n");
+    exit(1);
+  }
+  fclose(arq);
 }
-*/
+
+void arquivaBitcoins(unsigned int *Carteira)
+{
+  FILE *arq = fopen(CAMINHO_TRANSACAO, "r+b");
+  if (arq == NULL)
+  {
+    printf("Nao foi possivel abrir o arquivo!\n");
+    exit(1);
+  }
+  rewind(arq);
+  if (fwrite(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+  {
+    fclose(arq);
+    printf("Erro ao escrever no arquivo\n");
+    exit(1);
+  }
+  fclose(arq);
+  arq = fopen(CAMINHO_TRANSACAO, "rb");
+  rewind(arq);
+  if (fread(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+  {
+    fclose(arq);
+    printf("Erro na leitura do arquivo\n");
+    exit(1);
+  }
+  printf("Ok!\n");
+  fclose(arq);
+  return;
+}
+
+void preencheCarteiras(MTRand *r, unsigned int *Carteira, Metadados *cabecalho)
+{
+  int i = 0;
+  while (i < MAX_ENDERECOS)
+  {
+    Carteira[i] = getRandInt(r, 0, MAX_BITCOINS_TRANSACAO, cabecalho);
+    i++;
+  }
+}
+
+void transacoes(
+    BlocoNaoMinerado *bNM,
+    MTRand *r,
+    unsigned int *Carteira,
+    int nTrans,
+    Metadados *cabecalho)
+{
+  for (int i = 0; i < nTrans; i += 3)
+  {
+    short int origem = getRandInt(r, 0, 255, cabecalho);
+    short int destino = getRandInt(r, 0, 255, cabecalho);
+
+    if (origem == destino)
+    {
+      nTrans++;
+      continue;
+    }
+
+    short int btc = getRandInt(r, 0, MAX_BITCOINS_TRANSACAO, cabecalho);
+
+    if (btc > Carteira[origem])
+    {
+      Carteira[origem] = 0;
+    }
+    else
+      Carteira[origem] -= btc;
+
+    Carteira[destino] += btc;
+
+    bNM->data[i] = origem;
+    bNM->data[i + 1] = destino;
+    bNM->data[i + 2] = btc;
+  }
+}
+
+void ordenaBitcoins(
+    unsigned int *Carteira,
+    unsigned int *cartAux,
+    unsigned int *endereco)
+{
+
+  for (int j = 0; j < MAX_ENDERECOS; j++)
+    cartAux[j] = Carteira[j];
+
+  quicksort(cartAux, endereco, 0, MAX_ENDERECOS - 1);
+}
+
+void quicksort(
+    unsigned int *carteira,
+    unsigned int *endereco,
+    int esquerda,
+    int direita)
+{
+  int i, j, aux, y;
+
+  i = esquerda;
+  j = direita;
+  aux = carteira[(esquerda + direita) / 2];
+
+  while (i <= j)
+  {
+    while (carteira[i] < aux && i < direita)
+    {
+      i++;
+    }
+    while (carteira[j] > aux && j > esquerda)
+    {
+      j--;
+    }
+    if (i <= j)
+    {
+      y = carteira[i];
+      carteira[i] = carteira[j];
+      carteira[j] = y;
+
+      y = endereco[i];
+      endereco[i] = endereco[j];
+      endereco[j] = y;
+      i++;
+      j--;
+    }
+  }
+
+  if (j > esquerda)
+  {
+    quicksort(carteira, endereco, esquerda, j);
+  }
+  if (i < direita)
+  {
+    quicksort(carteira, endereco, i, direita);
+  }
+}

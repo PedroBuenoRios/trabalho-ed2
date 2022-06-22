@@ -1,22 +1,23 @@
 #include <stdio.h>
 #include "../include/blockchain.h"
 #include "../include/mtwister/mtwister.h"
+#include <sys/time.h>
 
 int main(int argc, char *argv[])
 {
 
   MTRand rand = seedRand(SEED);
 
-  unsigned int Carteira[MAX_ENDERECOS];
-
   unsigned int carteiraOrdenada[MAX_ENDERECOS];
-  unsigned int endereco[MAX_ENDERECOS];
+
+  End_Bitcoins *eb = (End_Bitcoins *)malloc(sizeof(End_Bitcoins));
+
   int a = -1;
 
   const char *arquivo = "./blockchain.bin";
   Metadados *cabecalho = (Metadados *)malloc(sizeof(Metadados));
   inicializarMetadados(arquivo, cabecalho, &rand);
-  inicializaEnderecos(Carteira, &rand, cabecalho, endereco);
+  inicializaEnderecos(eb, &rand, cabecalho);
 
   BlocoMinerado blocos[2];
   BlocoNaoMinerado *bNM = NULL;
@@ -28,11 +29,11 @@ int main(int argc, char *argv[])
   // NoLista *raiz = NULL;
   // addBlocoMinerado(genMinerado, &raiz);
 
-  ordenaBitcoins(Carteira, carteiraOrdenada, endereco);
+  ordenaBitcoins(eb->Carteira, carteiraOrdenada, eb->endereco);
   int minerar = 1;
   while (a != 0)
   {
-    printf("\nDigite o numero referente a operação que deseja realizar\n");
+    printf("\n\nDigite o numero referente a operação que deseja realizar\n");
     printf("1-Pesquisar hash de um bloco\n");
     printf("2-Pesquisar Carteira\n");
     printf("3-Buscar carteira com mais BitCoins\n");
@@ -44,30 +45,40 @@ int main(int argc, char *argv[])
     switch (a)
     {
     case 1:
-      // Fazer a busca do hash de um bloco
+      printf("Digite o numero do bloco que deseja encontrar o hash: ");
+      unsigned int num = 0;
+      scanf("%d", &num);
+      unsigned char hash[SHA256_DIGEST_LENGTH];
+      int resp = getHash(num, "./blockchain.bin", cabecalho, hash);
+      if (resp == 1)
+      {
+        for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+          printf("%x", hash[i]);
+        printf("\n");
+      }
       break;
     case 2:
       printf("Digite o endereco da Carteira que deseja pesquisar\n");
       int end;
       scanf("%d", &end);
-      printf("A Carteira %d tem %u BitCoin(s)\n", end, Carteira[end]);
+      printf("A Carteira %d tem %u BitCoin(s)\n", end, eb->Carteira[end]);
       break;
     case 3:
-      printf("%3d - %3u\n", endereco[255], carteiraOrdenada[255]);
+      printf("%3d - %3u\n", eb->endereco[255], carteiraOrdenada[255]);
       break;
     case 4:
       printf("Endereco   -   Bitcoin(s)\n");
       for (int k = 0; k < 256; k++)
-        printf("%3d - %3u\n", endereco[k], carteiraOrdenada[k]);
+        printf("%3d - %3u\n", eb->endereco[k], carteiraOrdenada[k]);
       break;
     case 5:
       if (cabecalho->quantidade == 0)
       {
         // Bloco Genesis
         bNM = alocaBlocoNaoMinerado();
-        initBloco(bNM, NULL, &rand, Carteira, cabecalho);
+        initBloco(bNM, NULL, &rand, eb->Carteira, cabecalho);
 
-        bMAtual = minerarBloco(bNM);
+        bMAtual = minerarBloco(bNM, cabecalho);
         bMAnterior = bMAtual;
         n += 1;
         blocos[n - 1] = *bMAtual;
@@ -76,28 +87,29 @@ int main(int argc, char *argv[])
       {
         bMAnterior = procuraUltimoBloco(arquivo, cabecalho->quantidade);
       }
+      minerar = 1;
       while (minerar)
       {
         // Aloca um novo
         bNM = alocaBlocoNaoMinerado();
         // Inicializa
-        initBloco(bNM, bMAnterior, &rand, Carteira, cabecalho);
+        initBloco(bNM, bMAnterior, &rand, eb->Carteira, cabecalho);
         // Minera
-        bMAtual = minerarBloco(bNM);
+        bMAtual = minerarBloco(bNM, cabecalho);
         n += 1;
         blocos[n - 1] = *bMAtual;
         if (n == 2)
         {
           arquivaBlocosMinerados(n, blocos, arquivo);
           attMetadados(arquivo, n, cabecalho, &rand);
-          arquivaBitcoins(Carteira);
+          arquivaBitcoins(eb);
           n = 0;
           minerar = 0;
         }
         // Adiciona o bloco minerado na blockchain
         bMAnterior = bMAtual;
       }
-      ordenaBitcoins(Carteira, carteiraOrdenada, endereco);
+      ordenaBitcoins(eb->Carteira, carteiraOrdenada, eb->endereco);
       break;
     default:
       printf("Digite uma opcao valida!\n");
@@ -117,6 +129,8 @@ void inicializarMetadados(const char *caminho, Metadados *cabecalho, MTRand *ran
     cabecalho->tamanho_bloco = (int)sizeof(BlocoMinerado);
     cabecalho->indice_mtrand = 0;
     cabecalho->qtd_estouros = 0;
+    cabecalho->dificuldade = 4;
+    genRandLong(rand);
     if (fwrite(cabecalho, sizeof(Metadados), 1, arq) != 1)
     {
       fclose(arq);
@@ -136,6 +150,7 @@ void inicializarMetadados(const char *caminho, Metadados *cabecalho, MTRand *ran
     exit(1);
   }
   // Se existem o que está escrito neles?
+  genRandLong(rand);
   for (int k = 0; k < cabecalho->qtd_estouros; k++)
   {
     rand->index = 624;
@@ -228,13 +243,6 @@ void attMetadados(const char *caminho, int n, Metadados *cabecalho, MTRand *rand
     exit(1);
   }
   rewind(arq);
-  if (fread(cabecalho, sizeof(Metadados), 1, arq) != 1)
-  {
-    fclose(arq);
-    printf("Erro na leitrua do arquivo\n");
-    exit(1);
-  }
-  rewind(arq);
   cabecalho->quantidade += n;
   cabecalho->indice_mtrand = rand->index;
   if (fwrite(cabecalho, sizeof(Metadados), 1, arq) != 1)
@@ -261,8 +269,13 @@ void printBloco(BlocoNaoMinerado *bNM)
   }
 }
 
-BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM)
+BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM, Metadados *cabecalho)
 {
+  double tempo_inicial, tempo_final, tempo;
+  tempo_inicial = tempo = tempo_final = 0;
+
+  struct timeval tempo_inicio, tempo_fim;
+  gettimeofday(&tempo_inicio, NULL);
   unsigned char hash[SHA256_DIGEST_LENGTH];
   // Para não demorar muito na mineração
   // 0 para nao minerado e 1 para minerado
@@ -270,12 +283,32 @@ BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM)
   do
   {
     criarHash(bNM, hash);
-    int *chave = (int *)hash;
-    if (*chave == 0)
+    for (int i = 0; i < cabecalho->dificuldade; i++)
+    {
+      if (hash[i] != 0)
+      {
+        minerado = 0;
+        break;
+      }
       minerado = 1;
+    }
     bNM->nonce += 1;
+    gettimeofday(&tempo_fim, NULL);
+    tempo_final = (double)tempo_fim.tv_usec + ((double)tempo_fim.tv_sec * 1000000.0);
+    tempo_inicial = (double)tempo_inicio.tv_usec + ((double)tempo_inicio.tv_sec * 1000000.0);
+    tempo = (tempo_final - tempo_inicial) / 1000;
+    if (tempo >= 300000)
+    {
+      cabecalho->dificuldade--;
+      bNM->nonce = 0;
+      gettimeofday(&tempo_inicio, NULL);
+    }
   } while (minerado == 0);
   bNM->nonce -= 1;
+  if (tempo < 30000)
+  {
+    cabecalho->dificuldade++;
+  }
   printBloco(bNM);
   BlocoMinerado *aux = (BlocoMinerado *)malloc(sizeof(BlocoMinerado));
   aux->bloco = *bNM;
@@ -314,7 +347,7 @@ void initBloco(
   if (bAnt == NULL)
   {
     bNM->numero = 1;
-    bNM->nonce = 170598660;
+    bNM->nonce = 0;
     for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
       bNM->hashAnterior[i] = 0;
   }
@@ -343,22 +376,21 @@ void initBloco(
 }
 
 void inicializaEnderecos(
-    unsigned int *Carteira,
+    End_Bitcoins *eb,
     MTRand *r,
-    Metadados *cabecalho,
-    unsigned int *endereco)
+    Metadados *cabecalho)
 {
 
   for (int k = 0; k < MAX_ENDERECOS; k++)
-    endereco[k] = k;
+    eb->endereco[k] = k;
 
   FILE *arq = fopen(CAMINHO_TRANSACAO, "r+b");
   if (arq == NULL)
   {
     arq = fopen(CAMINHO_TRANSACAO, "wb");
-    preencheCarteiras(r, Carteira, cabecalho);
+    preencheCarteiras(r, eb->Carteira, cabecalho);
 
-    if (fwrite(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+    if (fwrite(eb, sizeof(End_Bitcoins), 1, arq) != 1)
     {
       fclose(arq);
       printf("Erro ao escrever no arquivo\n");
@@ -370,7 +402,7 @@ void inicializaEnderecos(
   }
 
   rewind(arq);
-  if (fread(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+  if (fread(eb, sizeof(End_Bitcoins), 1, arq) != 1)
   {
     fclose(arq);
     printf("Erro na leitura do arquivo\n");
@@ -379,7 +411,7 @@ void inicializaEnderecos(
   fclose(arq);
 }
 
-void arquivaBitcoins(unsigned int *Carteira)
+void arquivaBitcoins(End_Bitcoins *eb)
 {
   FILE *arq = fopen(CAMINHO_TRANSACAO, "r+b");
   if (arq == NULL)
@@ -388,19 +420,10 @@ void arquivaBitcoins(unsigned int *Carteira)
     exit(1);
   }
   rewind(arq);
-  if (fwrite(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
+  if (fwrite(eb, sizeof(End_Bitcoins), 1, arq) != 1)
   {
     fclose(arq);
     printf("Erro ao escrever no arquivo\n");
-    exit(1);
-  }
-  fclose(arq);
-  arq = fopen(CAMINHO_TRANSACAO, "rb");
-  rewind(arq);
-  if (fread(Carteira, sizeof(unsigned int), MAX_ENDERECOS, arq) != MAX_ENDERECOS)
-  {
-    fclose(arq);
-    printf("Erro na leitura do arquivo\n");
     exit(1);
   }
   printf("Ok!\n");
@@ -509,4 +532,42 @@ void quicksort(
   {
     quicksort(carteira, endereco, i, direita);
   }
+}
+
+int getHash(unsigned int numero, const char *caminho, Metadados *cabecalho, unsigned char *hash)
+{
+
+  if (cabecalho->quantidade == 0)
+  {
+    return 0;
+  }
+  if (numero > cabecalho->quantidade || numero <= 0)
+  {
+    printf("Digite um numero de bloco valido");
+    hash = NULL;
+    return 0;
+  }
+  FILE *arq = fopen(caminho, "rb");
+  if (arq == NULL)
+  {
+    printf("Nao foi possivel abrir o arquivo\n");
+    exit(1);
+  }
+
+  BlocoMinerado aux;
+  rewind(arq);
+  int offset = ((numero - 1) * sizeof(BlocoMinerado)) + sizeof(Metadados);
+  fseek(arq, offset, SEEK_SET);
+  if (fread(&aux, sizeof(BlocoMinerado), 1, arq) != 1)
+  {
+    fclose(arq);
+    printf("Erro ao ler o arquivo!\n");
+    exit(1);
+  }
+  fclose(arq);
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+  {
+    hash[i] = aux.hash[i];
+  }
+  return 1;
 }

@@ -10,7 +10,6 @@
 
 #define CAMINHO_TRANSACAO "./carteiras.bin"
 
-short int dificuldade = 4;
 // Bloco que ainda não foi minerado
 struct BlocoNaoMinerado
 {
@@ -29,22 +28,22 @@ struct BlocoMinerado
 };
 typedef struct BlocoMinerado BlocoMinerado;
 
-struct arvore
-{
-  unsigned int btc;
-  int endereco;
-  struct arvore *esq, *dir;
-};
-typedef struct arvore arvore;
-
 struct Metadados
 {
-  int quantidade;
-  int tamanho_bloco;
+  unsigned short int dificuldade;
+  unsigned int quantidade;
+  unsigned int tamanho_bloco;
   unsigned int indice_mtrand;
-  int qtd_estouros;
+  unsigned int qtd_estouros;
 };
 typedef struct Metadados Metadados;
+
+struct End_Bitcoins
+{
+  unsigned int Carteira[MAX_ENDERECOS];
+  unsigned int endereco[MAX_ENDERECOS];
+};
+typedef struct End_Bitcoins End_Bitcoins;
 
 void ordenaBitcoins(
     unsigned int *Carteira,
@@ -58,12 +57,17 @@ void quicksort(
     int direita);
 
 void inicializaEnderecos(
-    unsigned int *Carteira,
+    End_Bitcoins *eb,
     MTRand *r,
-    Metadados *cabecalho,
-    unsigned int *endereco);
+    Metadados *cabecalho);
 
-void arquivaBitcoins(unsigned int *Carteira);
+void arquivaBitcoins(End_Bitcoins *eb);
+
+int getHash(
+    unsigned int numero,
+    const char *caminho,
+    Metadados *cabecalho,
+    unsigned char *hash);
 
 void criarHash(BlocoNaoMinerado *bNM, unsigned char *hash);
 
@@ -112,7 +116,7 @@ void initBloco(
     unsigned int *Carteira,
     Metadados *cabecalho);
 
-BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM);
+BlocoMinerado *minerarBloco(BlocoNaoMinerado *bNM, Metadados *cabecalho);
 
 BlocoMinerado *buscaBloco(BlocoMinerado *bM, unsigned int chave);
 
